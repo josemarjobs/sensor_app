@@ -8,8 +8,24 @@ import (
 )
 
 func main() {
-	server()
-	log.Println("Msg sent")
+	go client()
+	go server()
+
+	var a string
+	fmt.Scanln(&a)
+}
+
+func client() {
+	conn, ch, q := getQueue()
+	defer conn.Close()
+	defer ch.Close()
+
+	msgs, err := ch.Consume(q.Name, "", true, false, false, false, nil)
+	failOnError(err, "Failed to create a consumer")
+
+	for msg := range msgs {
+		log.Printf("MSG: %s\n", msg.Body)
+	}
 }
 
 func server() {
