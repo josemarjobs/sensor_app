@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"log"
 
 	"github.com/josemarjobs/sensors_app/dto"
 	"github.com/josemarjobs/sensors_app/qutils"
@@ -16,11 +17,13 @@ type QueueListener struct {
 	conn    *amqp.Connection
 	ch      *amqp.Channel
 	sources map[string]<-chan amqp.Delivery
+	ea      *EventAggregator
 }
 
 func NewQueueListener() *QueueListener {
 	ql := QueueListener{
 		sources: make(map[string]<-chan amqp.Delivery),
+		ea:      NewEventAggregator(),
 	}
 
 	ql.conn, ql.ch = qutils.GetChannel(url)
@@ -38,7 +41,11 @@ func (ql *QueueListener) ListenForNewSource() {
 
 	msgs, _ := ql.ch.Consume(q.Name, "", false, false, false, false, nil)
 
+	ql.DiscoverSensors()
+
+	log.Println("listening for new sources")
 	for msg := range msgs {
+		log.Println("new source discovered")
 		sourceChan, _ := ql.ch.Consume(
 			string(msg.Body), "", true, false, false, false, nil)
 		if ql.sources[string(msg.Body)] == nil {
@@ -49,6 +56,24 @@ func (ql *QueueListener) ListenForNewSource() {
 	}
 }
 
+func (ql *QueueListener) DiscoverSensors() {
+	ql.ch.ExchangeDeclare(
+		qutils.SensorDiscoveryExchange, // name
+		"fanout",                       // kind string
+		false,                          // durable bool
+		false,                          // autoDelete bool
+		false,                          // internal bool
+		false,                          // noWait bool
+		nil,                            // args amqp.Table
+	)
+	ql.ch.Publish(
+		qutils.SensorDiscoveryExchange, // name string
+		"",                // key string
+		false,             // mandatory bool
+		false,             // immediate bool
+		amqp.Publishing{}, // msg amqp.Publishing
+	)
+}
 func (ql *QueueListener) AddListener(msgs <-chan amqp.Delivery) {
 	for msg := range msgs {
 		r := bytes.NewReader(msg.Body)
@@ -57,5 +82,12 @@ func (ql *QueueListener) AddListener(msgs <-chan amqp.Delivery) {
 		d.Decode(sd)
 
 		fmt.Printf("Received Message: %v\n", sd)
+
+		ed := EventData{
+			Name:      sd.Name,
+			Timestamp: sd.Timestamp,
+			Value:     sd.Value,
+		}
+		ql.ea.PublishEvent("MessageReceived_"+msg.RoutingKey, ed)
 	}
 }
