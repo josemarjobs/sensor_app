@@ -2,11 +2,15 @@ package coordinator
 
 import "time"
 
+type Callback func(interface{})
+
+type EventRaiser interface {
+	AddListener(eventName string, f Callback)
+}
+
 type EventAggregator struct {
 	listeners map[string][]Callback
 }
-
-type Callback func(EventData)
 
 func NewEventAggregator() *EventAggregator {
 	return &EventAggregator{
@@ -18,7 +22,7 @@ func (ea *EventAggregator) AddListener(name string, f Callback) {
 	ea.listeners[name] = append(ea.listeners[name], f)
 }
 
-func (ea *EventAggregator) PublishEvent(name string, eventData EventData) {
+func (ea *EventAggregator) PublishEvent(name string, eventData interface{}) {
 	if ea.listeners[name] != nil {
 		for _, cb := range ea.listeners[name] {
 			cb(eventData)

@@ -1,0 +1,43 @@
+package datamanager
+
+import (
+	"fmt"
+
+	"github.com/josemarjobs/sensors_app/dto"
+)
+
+var sensors map[string]int
+
+func SaveReading(reading *dto.SensorMessage) error {
+	if sensors[reading.Name] == 0 {
+		getSensors()
+	}
+
+	if sensors[reading.Name] == 0 {
+		return fmt.Errorf("Unable to find sensor for name '%s'\n", reading.Name)
+	}
+
+	q := `
+    INSERT INTO sensor_reading
+      (value, sensor_id, take_on)
+    VALUES ($1, $2, $3)
+  `
+	_, err := db.Exec(q, reading.Value, sensors[reading.Name], reading.Timestamp)
+
+	return err
+}
+
+func getSensors() {
+	sensors = make(map[string]int)
+	q := `
+    SELECT id, name
+    FROM sensor
+  `
+	rows, _ := db.Query(q)
+	for rows.Next() {
+		var id int
+		var name string
+		rows.Scan(&id, &name)
+		sensors[name] = id
+	}
+}
