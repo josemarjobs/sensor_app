@@ -11,6 +11,8 @@ import (
 	"bytes"
 
 	"github.com/josemarjobs/sensors_app/dto"
+	"github.com/josemarjobs/sensors_app/qutils"
+	"github.com/streadway/amqp"
 )
 
 var url = "amqp://guest:guest@localhost:5672"
@@ -29,6 +31,12 @@ var nom = (*max-*min)/2 + *min
 func main() {
 	flag.Parse()
 
+	conn, ch := qutils.GetChannel(url)
+	defer conn.Close()
+	defer ch.Close()
+
+	dataQueue := qutils.GetQueue(*name, ch)
+
 	dur, _ := time.ParseDuration(strconv.Itoa(1000/int(*freq)) + "ms")
 
 	signal := time.Tick(dur)
@@ -46,6 +54,11 @@ func main() {
 
 		buf.Reset()
 		enc.Encode(reading)
+
+		msg := amqp.Publishing{
+			Body: buf.Bytes(),
+		}
+		ch.Publish("", dataQueue.Name, false, false, msg)
 
 		log.Printf("Reading sent. Value: %v\n", value)
 	}
